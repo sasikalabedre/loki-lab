@@ -1,0 +1,52 @@
+local.file_match "logs" {
+  path_targets = [
+    {"__path__" = "/var/log/nginx/access.log", "job" = "nginx", "service" = "nginx"},
+    {"__path__" = "/var/log/app/app.log", "job" = "app", "service" = "shop-api"},
+  ]
+}
+
+loki.source.file "logs" {
+  targets    = local.file_match.logs.targets
+  forward_to = [loki.process.parse.receiver]
+}
+
+loki.process "parse" {
+  stage.json {
+    expressions = {
+      status     = "status",
+      latency_ms = "latency_ms",
+      path       = "path",
+      level      = "level",
+    }
+  }
+
+  stage.labels {
+    values = {
+      status = "",
+      level  = "",
+    }
+  }
+
+  stage.replace {
+    expression = "token=([^&\"]+)"
+    replace    = "REDACTED"
+  }
+
+  stage.replace {
+    expression = "email=([^&\"]+)"
+    replace    = "REDACTED"
+  }
+
+  stage.replace {
+    expression = "\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.(\\d{1,3})"
+    replace    = "xxx"
+  }
+
+  forward_to = [loki.write.default.receiver]
+}
+
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}
